@@ -72,13 +72,7 @@ class Sync {
         .watch({ fullDocument: "updateLookup" })
         .on("change", async (data: any) => {
           if (this.option.debug) console.log("Debug: Change event triggered");
-          let index = this?.option?.prefix + data.ns.coll.toLowerCase();
-          let body = data.fullDocument;
-          let id = body?._id;
-          if (id) {
-            delete body._id;
-          }
-          await this.saveDataToElastic(id, index, body);
+          this.generateOperation(data);
         });
     } catch (error) {
       if (this.option.debug) console.log("Debug: Error in change event");
@@ -86,7 +80,91 @@ class Sync {
     }
   }
 
-  private async saveDataToElastic(id: string, index: string, body: object) {
+  private async generateOperation(data: any) {
+    let id, body;
+    let index = this?.option?.prefix + data.ns.coll.toLowerCase();
+    switch (data.operationType) {
+      case "delete":
+        id = data.documentKey._id;
+        await this.deleteDataOnElastic(id, index);
+        break;
+
+      case "insert":
+        body = data.fullDocument;
+        id = body?._id;
+        if (id) {
+          delete body._id;
+        }
+        await this.createDataOnElastic(id, index, body);
+        break;
+
+      case "update":
+        body = data.fullDocument;
+        id = body?._id;
+        if (id) {
+          delete body._id;
+        }
+        await this.updateDataOnElastic(id, index, body);
+        break;
+
+      case "drop":
+        await this.dropIndexOnElastic(index);
+        break;
+
+      default:
+        console.log(
+          `ERROR: mongo-elastic-sync: Unhandled operation ${data.operationType}, log it here: https://github.com/souravj96/mongo-elastic-sync/issues`
+        );
+        break;
+    }
+  }
+
+  private async dropIndexOnElastic(index: string) {
+    try {
+      await this.ESclient.indices.delete({
+        index: index,
+      });
+
+      if (this.option.debug) console.log("Debug: Elastic index dropped");
+    } catch (error) {
+      if (this.option.debug) console.log("Debug: Failed to drop index");
+      throw error;
+    }
+  }
+
+  private async deleteDataOnElastic(id: string, index: string) {
+    try {
+      await this.ESclient.delete({
+        index: index,
+        id: id,
+      });
+
+      if (this.option.debug) console.log("Debug: Elastic index deleted");
+    } catch (error) {
+      if (this.option.debug) console.log("Debug: Failed to delete index");
+      throw error;
+    }
+  }
+
+  private async updateDataOnElastic(id: string, index: string, body: object) {
+    try {
+      await this.ESclient.update({
+        index: index,
+        refresh: true,
+        id: id,
+        body: {
+          doc: body,
+        },
+      });
+
+      if (this.option.debug) console.log("Debug: Elastic index updated");
+    } catch (error) {
+      if (this.option.debug) console.log("Debug: Failed to update index");
+      throw error;
+    }
+  }
+
+  private async createDataOnElastic(id: string, index: string, body: object) {
     try {
       await this.ESclient.index({
         index,

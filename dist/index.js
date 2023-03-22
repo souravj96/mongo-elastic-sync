@@ -134,24 +134,11 @@ var Sync = /** @class */ (function () {
                     this.db
                         .watch({ fullDocument: "updateLookup" })
                         .on("change", function (data) { return __awaiter(_this, void 0, void 0, function () {
-                        var index, body, id;
-                        var _a;
-                        return __generator(this, function (_b) {
-                            switch (_b.label) {
-                                case 0:
-                                    if (this.option.debug)
-                                        console.log("Debug: Change event triggered");
-                                    index = ((_a = this === null || this === void 0 ? void 0 : this.option) === null || _a === void 0 ? void 0 : _a.prefix) + data.ns.coll.toLowerCase();
-                                    body = data.fullDocument;
-                                    id = body === null || body === void 0 ? void 0 : body._id;
-                                    if (id) {
-                                        delete body._id;
-                                    }
-                                    return [4 /*yield*/, this.saveDataToElastic(id, index, body)];
-                                case 1:
-                                    _b.sent();
-                                    return [2 /*return*/];
-                            }
+                        return __generator(this, function (_a) {
+                            if (this.option.debug)
+                                console.log("Debug: Change event triggered");
+                            this.generateOperation(data);
+                            return [2 /*return*/];
                         });
                     }); });
                 }
@@ -164,9 +151,144 @@ var Sync = /** @class */ (function () {
             });
         });
     };
-    Sync.prototype.saveDataToElastic = function (id, index, body) {
+    Sync.prototype.generateOperation = function (data) {
+        var _a;
+        return __awaiter(this, void 0, void 0, function () {
+            var id, body, index, _b;
+            return __generator(this, function (_c) {
+                switch (_c.label) {
+                    case 0:
+                        index = ((_a = this === null || this === void 0 ? void 0 : this.option) === null || _a === void 0 ? void 0 : _a.prefix) + data.ns.coll.toLowerCase();
+                        _b = data.operationType;
+                        switch (_b) {
+                            case "delete": return [3 /*break*/, 1];
+                            case "insert": return [3 /*break*/, 3];
+                            case "update": return [3 /*break*/, 5];
+                            case "drop": return [3 /*break*/, 7];
+                        }
+                        return [3 /*break*/, 9];
+                    case 1:
+                        id = data.documentKey._id;
+                        return [4 /*yield*/, this.deleteDataOnElastic(id, index)];
+                    case 2:
+                        _c.sent();
+                        return [3 /*break*/, 10];
+                    case 3:
+                        body = data.fullDocument;
+                        id = body === null || body === void 0 ? void 0 : body._id;
+                        if (id) {
+                            delete body._id;
+                        }
+                        return [4 /*yield*/, this.createDataOnElastic(id, index, body)];
+                    case 4:
+                        _c.sent();
+                        return [3 /*break*/, 10];
+                    case 5:
+                        body = data.fullDocument;
+                        id = body === null || body === void 0 ? void 0 : body._id;
+                        if (id) {
+                            delete body._id;
+                        }
+                        return [4 /*yield*/, this.updateDataOnElastic(id, index, body)];
+                    case 6:
+                        _c.sent();
+                        return [3 /*break*/, 10];
+                    case 7: return [4 /*yield*/, this.dropIndexOnElastic(index)];
+                    case 8:
+                        _c.sent();
+                        return [3 /*break*/, 10];
+                    case 9:
+                        console.log("ERROR: mongo-elastic-sync: Unhandled operation ".concat(data.operationType, ", log it here: https://github.com/souravj96/mongo-elastic-sync/issues"));
+                        return [3 /*break*/, 10];
+                    case 10: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    Sync.prototype.dropIndexOnElastic = function (index) {
         return __awaiter(this, void 0, void 0, function () {
             var error_3;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        _a.trys.push([0, 2, , 3]);
+                        return [4 /*yield*/, this.ESclient.indices.delete({
+                                index: index,
+                            })];
+                    case 1:
+                        _a.sent();
+                        if (this.option.debug)
+                            console.log("Debug: Elastic index dropped");
+                        return [3 /*break*/, 3];
+                    case 2:
+                        error_3 = _a.sent();
+                        if (this.option.debug)
+                            console.log("Debug: Failed to drop index");
+                        throw error_3;
+                    case 3: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    Sync.prototype.deleteDataOnElastic = function (id, index) {
+        return __awaiter(this, void 0, void 0, function () {
+            var error_4;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        _a.trys.push([0, 2, , 3]);
+                        return [4 /*yield*/, this.ESclient.delete({
+                                index: index,
+                                id: id,
+                            })];
+                    case 1:
+                        _a.sent();
+                        if (this.option.debug)
+                            console.log("Debug: Elastic index deleted");
+                        return [3 /*break*/, 3];
+                    case 2:
+                        error_4 = _a.sent();
+                        if (this.option.debug)
+                            console.log("Debug: Failed to delete index");
+                        throw error_4;
+                    case 3: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    Sync.prototype.updateDataOnElastic = function (id, index, body) {
+        return __awaiter(this, void 0, void 0, function () {
+            var error_5;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        _a.trys.push([0, 2, , 3]);
+                        return [4 /*yield*/, this.ESclient.update({
+                                index: index,
+                                refresh: true,
+                                id: id,
+                                body: {
+                                    doc: body,
+                                },
+                            })];
+                    case 1:
+                        _a.sent();
+                        if (this.option.debug)
+                            console.log("Debug: Elastic index updated");
+                        return [3 /*break*/, 3];
+                    case 2:
+                        error_5 = _a.sent();
+                        if (this.option.debug)
+                            console.log("Debug: Failed to update index");
+                        throw error_5;
+                    case 3: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    Sync.prototype.createDataOnElastic = function (id, index, body) {
+        return __awaiter(this, void 0, void 0, function () {
+            var error_6;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -182,10 +304,10 @@ var Sync = /** @class */ (function () {
                             console.log("Debug: Elastic index created");
                         return [3 /*break*/, 3];
                     case 2:
-                        error_3 = _a.sent();
+                        error_6 = _a.sent();
                         if (this.option.debug)
                             console.log("Debug: Failed to create index");
-                        throw error_3;
+                        throw error_6;
                     case 3: return [2 /*return*/];
                 }
             });
