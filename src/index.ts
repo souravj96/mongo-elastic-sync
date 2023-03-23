@@ -32,7 +32,7 @@ class Sync {
       await this.initMongo();
       await this.initWatcher();
     } catch (error) {
-      throw error;
+      if (this.option.debug) throw error;
     }
   }
 
@@ -154,6 +154,7 @@ class Sync {
         id: id,
         body: {
           doc: body,
+          doc_as_upsert: true,
         },
       });
 
