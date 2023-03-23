@@ -69,7 +69,9 @@ var Sync = /** @class */ (function () {
                         return [3 /*break*/, 5];
                     case 4:
                         error_1 = _a.sent();
-                        throw error_1;
+                        if (this.option.debug)
+                            throw error_1;
+                        return [3 /*break*/, 5];
                     case 5: return [2 /*return*/];
                 }
             });
@@ -269,6 +271,7 @@ var Sync = /** @class */ (function () {
                                 id: id,
                                 body: {
                                     doc: body,
+                                    doc_as_upsert: true,
                                 },
                             })];
                     case 1:
