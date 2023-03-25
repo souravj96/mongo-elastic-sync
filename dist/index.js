@@ -42,6 +42,7 @@ var Sync = /** @class */ (function () {
     function Sync(mongoURL, elasticURL, option) {
         this.option = {
             prefix: "auto-sync-",
+            initialSync: true,
             debug: false,
         };
         this.mongoURL = mongoURL;
@@ -50,29 +51,79 @@ var Sync = /** @class */ (function () {
             this.option = option;
         }
     }
-    Sync.prototype.startSync = function () {
+    Sync.prototype.initialSync = function () {
         return __awaiter(this, void 0, void 0, function () {
             var error_1;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        _a.trys.push([0, 4, , 5]);
+                        _a.trys.push([0, 6, , 7]);
+                        if (!!this.ESclient) return [3 /*break*/, 2];
                         return [4 /*yield*/, this.initElastic()];
                     case 1:
                         _a.sent();
-                        return [4 /*yield*/, this.initMongo()];
+                        _a.label = 2;
                     case 2:
-                        _a.sent();
-                        return [4 /*yield*/, this.initWatcher()];
+                        if (!!this.db) return [3 /*break*/, 4];
+                        return [4 /*yield*/, this.initMongo()];
                     case 3:
                         _a.sent();
-                        return [3 /*break*/, 5];
+                        _a.label = 4;
                     case 4:
+                        if (this.option.debug)
+                            console.log("Debug: Initial mongodb sync started");
+                        return [4 /*yield*/, this.initDbSync()];
+                    case 5:
+                        _a.sent();
+                        return [3 /*break*/, 7];
+                    case 6:
                         error_1 = _a.sent();
                         if (this.option.debug)
                             throw error_1;
-                        return [3 /*break*/, 5];
-                    case 5: return [2 /*return*/];
+                        else
+                            return [2 /*return*/];
+                        return [3 /*break*/, 7];
+                    case 7: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    Sync.prototype.startSync = function () {
+        return __awaiter(this, void 0, void 0, function () {
+            var error_2;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        _a.trys.push([0, 8, , 9]);
+                        if (!!this.ESclient) return [3 /*break*/, 2];
+                        return [4 /*yield*/, this.initElastic()];
+                    case 1:
+                        _a.sent();
+                        _a.label = 2;
+                    case 2:
+                        if (!!this.db) return [3 /*break*/, 4];
+                        return [4 /*yield*/, this.initMongo()];
+                    case 3:
+                        _a.sent();
+                        _a.label = 4;
+                    case 4:
+                        if (!this.option.initialSync) return [3 /*break*/, 6];
+                        return [4 /*yield*/, this.initialSync()];
+                    case 5:
+                        _a.sent();
+                        _a.label = 6;
+                    case 6: return [4 /*yield*/, this.initWatcher()];
+                    case 7:
+                        _a.sent();
+                        return [3 /*break*/, 9];
+                    case 8:
+                        error_2 = _a.sent();
+                        if (this.option.debug)
+                            throw error_2;
+                        else
+                            return [2 /*return*/];
+                        return [3 /*break*/, 9];
+                    case 9: return [2 /*return*/];
                 }
             });
         });
@@ -103,7 +154,7 @@ var Sync = /** @class */ (function () {
     };
     Sync.prototype.initMongo = function () {
         return __awaiter(this, void 0, void 0, function () {
-            var client, error_2;
+            var client, error_3;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -119,11 +170,53 @@ var Sync = /** @class */ (function () {
                         this.db = client.db();
                         return [3 /*break*/, 3];
                     case 2:
-                        error_2 = _a.sent();
+                        error_3 = _a.sent();
                         if (this.option.debug)
                             console.log("Debug: Failed to connect mongodb");
-                        throw error_2;
+                        throw error_3;
                     case 3: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    Sync.prototype.initDbSync = function () {
+        var _a;
+        return __awaiter(this, void 0, void 0, function () {
+            var collectionsArr, collection, i, coll, index, allData, error_4;
+            return __generator(this, function (_b) {
+                switch (_b.label) {
+                    case 0:
+                        _b.trys.push([0, 7, , 8]);
+                        return [4 /*yield*/, this.db.listCollections().toArray()];
+                    case 1:
+                        collectionsArr = _b.sent();
+                        collection = collectionsArr.map(function (ele) {
+                            return ele.type === "collection" ? ele.name : null;
+                        });
+                        i = 0;
+                        _b.label = 2;
+                    case 2:
+                        if (!(i < collection.length)) return [3 /*break*/, 6];
+                        coll = collection[i];
+                        index = ((_a = this === null || this === void 0 ? void 0 : this.option) === null || _a === void 0 ? void 0 : _a.prefix) + coll.toLowerCase();
+                        if (!coll) return [3 /*break*/, 5];
+                        return [4 /*yield*/, this.db.collection(coll).find().toArray()];
+                    case 3:
+                        allData = _b.sent();
+                        return [4 /*yield*/, this.createBulkDataOnElastic(index, allData)];
+                    case 4:
+                        _b.sent();
+                        _b.label = 5;
+                    case 5:
+                        i++;
+                        return [3 /*break*/, 2];
+                    case 6: return [3 /*break*/, 8];
+                    case 7:
+                        error_4 = _b.sent();
+                        if (this.option.debug)
+                            console.log("Debug: Failed to initial sync mongodb");
+                        throw error_4;
+                    case 8: return [2 /*return*/];
                 }
             });
         });
@@ -133,16 +226,35 @@ var Sync = /** @class */ (function () {
             var _this = this;
             return __generator(this, function (_a) {
                 try {
-                    this.db
-                        .watch({ fullDocument: "updateLookup" })
-                        .on("change", function (data) { return __awaiter(_this, void 0, void 0, function () {
-                        return __generator(this, function (_a) {
-                            if (this.option.debug)
-                                console.log("Debug: Change event triggered");
-                            this.generateOperation(data);
-                            return [2 /*return*/];
-                        });
-                    }); });
+                    return [2 /*return*/, new Promise(function (resolve, reject) {
+                            _this.db
+                                .watch({ fullDocument: "updateLookup" })
+                                .on("change", function (data, error) { return __awaiter(_this, void 0, void 0, function () {
+                                var error_5;
+                                return __generator(this, function (_a) {
+                                    switch (_a.label) {
+                                        case 0:
+                                            _a.trys.push([0, 2, , 3]);
+                                            if (error)
+                                                reject(error);
+                                            if (this.option.debug)
+                                                console.log("Debug: Change event triggered");
+                                            return [4 /*yield*/, this.generateOperation(data)];
+                                        case 1:
+                                            _a.sent();
+                                            resolve();
+                                            return [3 /*break*/, 3];
+                                        case 2:
+                                            error_5 = _a.sent();
+                                            if (this.option.debug)
+                                                console.log("Debug: Error in change event");
+                                            reject(error_5);
+                                            return [3 /*break*/, 3];
+                                        case 3: return [2 /*return*/];
+                                    }
+                                });
+                            }); });
+                        })];
                 }
                 catch (error) {
                     if (this.option.debug)
@@ -156,10 +268,12 @@ var Sync = /** @class */ (function () {
     Sync.prototype.generateOperation = function (data) {
         var _a;
         return __awaiter(this, void 0, void 0, function () {
-            var id, body, index, _b;
+            var id, body, index, _b, error_6;
             return __generator(this, function (_c) {
                 switch (_c.label) {
                     case 0:
+                        _c.trys.push([0, 11, , 12]);
+                        id = void 0, body = void 0;
                         index = ((_a = this === null || this === void 0 ? void 0 : this.option) === null || _a === void 0 ? void 0 : _a.prefix) + data.ns.coll.toLowerCase();
                         _b = data.operationType;
                         switch (_b) {
@@ -202,14 +316,18 @@ var Sync = /** @class */ (function () {
                     case 9:
                         console.log("ERROR: mongo-elastic-sync: Unhandled operation ".concat(data.operationType, ", log it here: https://github.com/souravj96/mongo-elastic-sync/issues"));
                         return [3 /*break*/, 10];
-                    case 10: return [2 /*return*/];
+                    case 10: return [3 /*break*/, 12];
+                    case 11:
+                        error_6 = _c.sent();
+                        throw error_6;
+                    case 12: return [2 /*return*/];
                 }
             });
         });
     };
     Sync.prototype.dropIndexOnElastic = function (index) {
         return __awaiter(this, void 0, void 0, function () {
-            var error_3;
+            var error_7;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -223,10 +341,10 @@ var Sync = /** @class */ (function () {
                             console.log("Debug: Elastic index dropped");
                         return [3 /*break*/, 3];
                     case 2:
-                        error_3 = _a.sent();
+                        error_7 = _a.sent();
                         if (this.option.debug)
                             console.log("Debug: Failed to drop index");
-                        throw error_3;
+                        throw error_7;
                     case 3: return [2 /*return*/];
                 }
             });
@@ -234,7 +352,7 @@ var Sync = /** @class */ (function () {
     };
     Sync.prototype.deleteDataOnElastic = function (id, index) {
         return __awaiter(this, void 0, void 0, function () {
-            var error_4;
+            var error_8;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -249,10 +367,10 @@ var Sync = /** @class */ (function () {
                             console.log("Debug: Elastic index deleted");
                         return [3 /*break*/, 3];
                     case 2:
-                        error_4 = _a.sent();
+                        error_8 = _a.sent();
                         if (this.option.debug)
                             console.log("Debug: Failed to delete index");
-                        throw error_4;
+                        throw error_8;
                     case 3: return [2 /*return*/];
                 }
             });
@@ -260,7 +378,7 @@ var Sync = /** @class */ (function () {
     };
     Sync.prototype.updateDataOnElastic = function (id, index, body) {
         return __awaiter(this, void 0, void 0, function () {
-            var error_5;
+            var error_9;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -280,10 +398,10 @@ var Sync = /** @class */ (function () {
                             console.log("Debug: Elastic index updated");
                         return [3 /*break*/, 3];
                     case 2:
-                        error_5 = _a.sent();
+                        error_9 = _a.sent();
                         if (this.option.debug)
                             console.log("Debug: Failed to update index");
-                        throw error_5;
+                        throw error_9;
                     case 3: return [2 /*return*/];
                 }
             });
@@ -291,7 +409,7 @@ var Sync = /** @class */ (function () {
     };
     Sync.prototype.createDataOnElastic = function (id, index, body) {
         return __awaiter(this, void 0, void 0, function () {
-            var error_6;
+            var error_10;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -307,10 +425,43 @@ var Sync = /** @class */ (function () {
                             console.log("Debug: Elastic index created");
                         return [3 /*break*/, 3];
                     case 2:
-                        error_6 = _a.sent();
+                        error_10 = _a.sent();
                         if (this.option.debug)
                             console.log("Debug: Failed to create index");
-                        throw error_6;
+                        throw error_10;
+                    case 3: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    Sync.prototype.createBulkDataOnElastic = function (index, body) {
+        return __awaiter(this, void 0, void 0, function () {
+            var data, error_11;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        _a.trys.push([0, 2, , 3]);
+                        data = body.flatMap(function (doc) {
+                            var id = doc === null || doc === void 0 ? void 0 : doc._id;
+                            if (id) {
+                                delete doc._id;
+                            }
+                            return [{ index: { _index: index, _id: id }, doc: doc }];
+                        });
+                        return [4 /*yield*/, this.ESclient.bulk({
+                                refresh: true,
+                                body: data,
+                            })];
+                    case 1:
+                        _a.sent();
+                        if (this.option.debug)
+                            console.log("Debug: Elastic bulk index created: " + index);
+                        return [3 /*break*/, 3];
+                    case 2:
+                        error_11 = _a.sent();
+                        if (this.option.debug)
+                            console.log("Debug: Failed to create bulk index");
+                        throw error_11;
                     case 3: return [2 /*return*/];
                 }
             });

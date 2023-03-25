@@ -5,6 +5,7 @@ import { MongoClient } from "mongodb";
 
 interface Option {
   prefix: string;
+  initialSync: boolean;
   debug: boolean;
 }
 
@@ -15,6 +16,7 @@ class Sync {
   elasticURL: string;
   option: Option = {
     prefix: "auto-sync-",
+    initialSync: true,
     debug: false,
   };
 
@@ -26,13 +28,27 @@ class Sync {
     }
   }
 
+  async initialSync() {
+    try {
+      if (!this.ESclient) await this.initElastic();
+      if (!this.db) await this.initMongo();
+      if (this.option.debug) console.log("Debug: Initial mongodb sync started");
+      await this.initDbSync();
+    } catch (error) {
+      if (this.option.debug) throw error;
+      else return;
+    }
+  }
+
   async startSync() {
     try {
-      await this.initElastic();
-      await this.initMongo();
+      if (!this.ESclient) await this.initElastic();
+      if (!this.db) await this.initMongo();
+      if (this.option.initialSync) await this.initialSync();
       await this.initWatcher();
     } catch (error) {
       if (this.option.debug) throw error;
+      else return;
     }
   }
 
@@ -66,14 +82,46 @@ class Sync {
     }
   }
 
+  private async initDbSync() {
+    try {
+      let collectionsArr = await this.db.listCollections().toArray();
+      let collection = collectionsArr.map((ele: any) =>
+        ele.type === "collection" ? ele.name : null
+      );
+      for (let i = 0; i < collection.length; i++) {
+        let coll = collection[i];
+        let index = this?.option?.prefix + coll.toLowerCase();
+        if (coll) {
+          let allData = await this.db.collection(coll).find().toArray();
+          await this.createBulkDataOnElastic(index, allData);
+        }
+      }
+    } catch (error) {
+      if (this.option.debug)
+        console.log("Debug: Failed to initial sync mongodb");
+      throw error;
+    }
+  }
+
   private async initWatcher() {
     try {
-      this.db
-        .watch({ fullDocument: "updateLookup" })
-        .on("change", async (data: any) => {
-          if (this.option.debug) console.log("Debug: Change event triggered");
-          this.generateOperation(data);
-        });
+      return new Promise((resolve: any, reject: any) => {
+        this.db
+          .watch({ fullDocument: "updateLookup" })
+          .on("change", async (data: any, error: any) => {
+            try {
+              if (error) reject(error);
+              if (this.option.debug)
+                console.log("Debug: Change event triggered");
+              await this.generateOperation(data);
+              resolve();
+            } catch (error) {
+              if (this.option.debug)
+                console.log("Debug: Error in change event");
+              reject(error);
+            }
+          });
+      });
     } catch (error) {
       if (this.option.debug) console.log("Debug: Error in change event");
       throw error;
@@ -81,41 +129,45 @@ class Sync {
   }
 
   private async generateOperation(data: any) {
-    let id, body;
-    let index = this?.option?.prefix + data.ns.coll.toLowerCase();
-    switch (data.operationType) {
-      case "delete":
-        id = data.documentKey._id;
-        await this.deleteDataOnElastic(id, index);
-        break;
+    try {
+      let id, body;
+      let index = this?.option?.prefix + data.ns.coll.toLowerCase();
+      switch (data.operationType) {
+        case "delete":
+          id = data.documentKey._id;
+          await this.deleteDataOnElastic(id, index);
+          break;
 
-      case "insert":
-        body = data.fullDocument;
-        id = body?._id;
-        if (id) {
-          delete body._id;
-        }
-        await this.createDataOnElastic(id, index, body);
-        break;
+        case "insert":
+          body = data.fullDocument;
+          id = body?._id;
+          if (id) {
+            delete body._id;
+          }
+          await this.createDataOnElastic(id, index, body);
+          break;
 
-      case "update":
-        body = data.fullDocument;
-        id = body?._id;
-        if (id) {
-          delete body._id;
-        }
-        await this.updateDataOnElastic(id, index, body);
-        break;
+        case "update":
+          body = data.fullDocument;
+          id = body?._id;
+          if (id) {
+            delete body._id;
+          }
+          await this.updateDataOnElastic(id, index, body);
+          break;
 
-      case "drop":
-        await this.dropIndexOnElastic(index);
-        break;
+        case "drop":
+          await this.dropIndexOnElastic(index);
+          break;
 
-      default:
-        console.log(
-          `ERROR: mongo-elastic-sync: Unhandled operation ${data.operationType}, log it here: https://github.com/souravj96/mongo-elastic-sync/issues`
-        );
-        break;
+        default:
+          console.log(
+            `ERROR: mongo-elastic-sync: Unhandled operation ${data.operationType}, log it here: https://github.com/souravj96/mongo-elastic-sync/issues`
+          );
+          break;
+      }
+    } catch (error) {
+      throw error;
     }
   }
 
@@ -176,6 +228,28 @@ class Sync {
       if (this.option.debug) console.log("Debug: Elastic index created");
     } catch (error) {
       if (this.option.debug) console.log("Debug: Failed to create index");
+      throw error;
+    }
+  }
+
+  private async createBulkDataOnElastic(index: string, body: any[]) {
+    try {
+      const data = body.flatMap((doc: any) => {
+        let id = doc?._id;
+        if (id) {
+          delete doc._id;
+        }
+        return [{ index: { _index: index, _id: id }, doc }];
+      });
+      await this.ESclient.bulk({
+        refresh: true,
+        body: data,
+      });
+
+      if (this.option.debug)
+        console.log("Debug: Elastic bulk index created: " + index);
+    } catch (error) {
+      if (this.option.debug) console.log("Debug: Failed to create bulk index");
       throw error;
     }
   }
