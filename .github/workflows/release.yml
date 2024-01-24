@@ -1,0 +1,46 @@
+name: Release Workflow
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 14
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run build script
+        run: npm run build
+
+      - name: Bump version and create tag
+        run: |
+          npm version patch -m "Bump version to %s"
+          git push --follow-tags
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body: |
+            Changes in this release:
+            - ...
+
+      - name: Publish to npm
+        uses: actions/npm@v1
+        with:
+          token: ${{secrets.GITHUB_TOKEN}}
+          access: public
