@@ -35,7 +35,7 @@ jobs:
       - name: Bump version and create tag
         run: |
           npm version patch -m "Bump version to %s"
-          git push --follow-tags https://$GIT_TOKEN@github.com/souravj96/mongo-elastic-sync.git
+          git push --follow-tags https://${{ secrets.GIT_TOKEN }}@github.com/souravj96/mongo-elastic-sync.git
 
       - name: Create Release
         id: create_release
