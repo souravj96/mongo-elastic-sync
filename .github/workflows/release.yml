@@ -29,23 +29,23 @@ jobs:
       - name: Run build script
         run: npm run build
 
-      - name: Check for changes
-        run: git diff --exit-code || (git add . && git commit -m "Committing changes")
+      # - name: Check for changes
+      #   run: git diff --exit-code || (git add . && git commit -m "Committing changes")
 
-      - name: Bump version and create tag
-        run: |
-          npm version patch -m "Bump version to %s"
-          git push --follow-tags https://${{ secrets.GIT_TOKEN }}@github.com/souravj96/mongo-elastic-sync.git
+      # - name: Bump version and create tag
+      #   run: |
+      #     npm version patch -m "Bump version to %s"
+      #     git push --follow-tags https://${{ secrets.GIT_TOKEN }}@github.com/souravj96/mongo-elastic-sync.git
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          body: |
-            Changes in this release:
-            - ...
+      # - name: Create Release
+      #   id: create_release
+      #   uses: actions/create-release@v1
+      #   with:
+      #     tag_name: ${{ github.ref }}
+      #     release_name: Release ${{ github.ref }}
+      #     body: |
+      #       Changes in this release:
+      #       - ...
 
       - name: Publish to npm
         run: npm publish
