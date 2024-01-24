@@ -1,46 +1,62 @@
-# Mongodb to Elasticsearch Auto-sync
+# mongo-elastic-sync
 
----
+![GitHub package.json version](https://img.shields.io/github/package-json/v/souravj96/mongo-elastic-sync)
+![GitHub](https://img.shields.io/github/license/souravj96/mongo-elastic-sync)
+![GitHub Workflow Status](https://img.shields.io/github/workflow/status/souravj96/mongo-elastic-sync/Node.js%20CI)
+[![npm](https://img.shields.io/npm/dm/mongo-elastic-sync)](https://www.npmjs.com/package/mongo-elastic-sync)
 
-`mongo-elastic-sync` allows automatic transfer of data from a MongoDB database to an Elasticsearch index. This process is typically used when there is a need to search and analyze data stored in MongoDB using Elasticsearch, which is a powerful search and analytics engine.
+🚀 Mongo-Elastic Sync is a Node.js library that provides synchronization between MongoDB and Elasticsearch. Seamlessly sync data changes between MongoDB collections and corresponding Elasticsearch indices.
+
+## Installation
+
+```bash
+npm install mongo-elastic-sync
+```
+
+## Usage
+
+```javascript
+const { Sync } = require("mongo-elastic-sync");
+
+const mongoURL = "mongodb://localhost:27017";
+const elasticURL = "http://localhost:9200";
+
+const option = {
+  prefix: "auto-sync-",
+  initialSync: true,
+  debug: false,
+};
+
+const syncInstance = new Sync(mongoURL, elasticURL, option);
+
+// Initial Sync (Optional)
+syncInstance.initialSync();
+
+// Start Continuous Sync
+syncInstance.startSync();
+```
+
+## Configuration
+
+- `mongoURL` (string): MongoDB connection URL.
+- `elasticURL` (string): Elasticsearch connection URL.
+- `option` (object):
+  - `prefix` (string, optional): Prefix for Elasticsearch indices. Default is "auto-sync-".
+  - `initialSync` (boolean, optional): Perform an initial sync of existing MongoDB data to Elasticsearch. Default is `true`.
+  - `debug` (boolean, optional): Enable debug mode for detailed logs. Default is `false`.
 
 ## Features
 
----
+- 🔄 **Initial Sync:** Syncs existing MongoDB data to Elasticsearch upon initialization.
+- 🔁 **Continuous Sync:** Listens for changes in MongoDB collections and updates corresponding Elasticsearch indices.
 
-⭐ `startSync()` function will automatically sync every mongodb change event to elastic server
+## License
 
-## Install
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
----
+## Links
 
-```
-npm i mongo-elastic-sync
-```
+- [![npm](https://img.shields.io/npm/dm/mongo-elastic-sync)](https://www.npmjs.com/package/mongo-elastic-sync)
+- [GitHub Repository](https://github.com/souravj96/mongo-elastic-sync)
 
-## Quick start
-
----
-
-```
-"use strict";
-const { Sync } = require("mongo-elastic-sync");
-require("dotenv").config();
-
-const autoSyncObject = new Sync(
-    process.env.MONGO_URL,
-    process.env.ELASTIC_URL,
-);
-
-autoSyncObject.startSync();
-```
-
-you can use your own custom prefix for elastic index
-
-```
-const autoSyncObject = new Sync(
-  process.env.MONGO_URL,
-  process.env.ELASTIC_URL,
-  { prefix: "update-test-" }
-);
-```
+Feel free to contribute, report issues, or request features on [GitHub](https://github.com/souravj96/mongo-elastic-sync).
