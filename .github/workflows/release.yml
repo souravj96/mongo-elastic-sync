@@ -24,6 +24,9 @@ jobs:
       - name: Run build script
         run: npm run build
 
+      - name: Check for changes
+        run: git diff --exit-code || (git add . && git commit -m "Committing changes")
+
       - name: Bump version and create tag
         run: |
           npm version patch -m "Bump version to %s"
@@ -42,4 +45,4 @@ jobs:
       - name: Publish to npm
         run: npm publish
         env:
-          NODE_AUTH_TOKEN:  ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
