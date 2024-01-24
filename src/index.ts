@@ -19,6 +19,10 @@ class Sync {
     initialSync: true,
     debug: false,
   };
+  indexCount: number = 0;
+  failedIndexCount: number = 0;
+  dataCount: number = 0;
+  failedDataCount: number = 0;
 
   constructor(mongoURL: string, elasticURL: string, option: Option) {
     this.mongoURL = mongoURL;
@@ -34,6 +38,10 @@ class Sync {
       if (!this.db) await this.initMongo();
       if (this.option.debug) console.log("Debug: Initial mongodb sync started");
       await this.initDbSync();
+      // if (this.option.debug)
+      console.log(
+        `Info: Initial mongodb sync completed with index=> ${this.indexCount} success and ${this.failedIndexCount} failed ||  data=> ${this.dataCount} success and ${this.failedDataCount} failed`
+      );
     } catch (error) {
       if (this.option.debug) throw error;
       else return;
@@ -88,17 +96,32 @@ class Sync {
       let collection = collectionsArr.map((ele: any) =>
         ele.type === "collection" ? ele.name : null
       );
-      for (let i = 0; i < collection.length; i++) {
-        let coll = collection[i];
-        let index = this?.option?.prefix + coll.toLowerCase();
+
+      const promises = collection.map(async (coll: any) => {
         if (coll) {
-          let allData = await this.db.collection(coll).find().toArray();
-          await this.createBulkDataOnElastic(index, allData);
+          let index = this?.option?.prefix + coll.toLowerCase();
+          try {
+            let allData = await this.db.collection(coll).find().toArray();
+            if (Array.isArray(allData) && allData.length > 0) {
+              await this.createBulkDataOnElastic(index, allData);
+            } else {
+              await this.createIndexOnElastic(index);
+            }
+            this.indexCount++;
+          } catch (error) {
+            this.failedIndexCount++;
+            if (this.option.debug) {
+              console.error(`Error: Failed to process collection ${coll}`);
+            }
+          }
         }
-      }
+      });
+
+      await Promise.allSettled(promises);
     } catch (error) {
-      if (this.option.debug)
+      if (this.option.debug) {
         console.log("Debug: Failed to initial sync mongodb");
+      }
       throw error;
     }
   }
@@ -217,6 +240,41 @@ class Sync {
     }
   }
 
+  private async indexExists(index: string) {
+    try {
+      const { body: exists } = await this.ESclient.indices.exists({
+        index,
+      });
+      if (this.option.debug)
+        console.log("Info: Elastic index already exists => ", index);
+      return true;
+    } catch (error) {
+      if (this.option.debug)
+        console.error(`Error checking if index "${index}" exists:`, error);
+      return false;
+    }
+  }
+
+  private async createIndexOnElastic(index: string) {
+    try {
+      const exists = await this.indexExists(index);
+
+      if (!exists) {
+        await this.ESclient.indices.create({
+          index,
+          body: {},
+        });
+
+        if (this.option.debug)
+          console.log("Info: Elastic index created => ", index);
+      }
+    } catch (error) {
+      if (this.option.debug)
+        console.error("Error: Failed to create index => ", index);
+      throw error;
+    }
+  }
+
   private async createDataOnElastic(id: string, index: string, body: object) {
     try {
       await this.ESclient.index({
@@ -225,31 +283,62 @@ class Sync {
         body,
       });
 
-      if (this.option.debug) console.log("Debug: Elastic index created");
+      if (this.option.debug) console.log("Info: Elastic index created");
     } catch (error) {
-      if (this.option.debug) console.log("Debug: Failed to create index");
+      if (this.option.debug) console.error("Error: Failed to create index");
       throw error;
     }
   }
 
   private async createBulkDataOnElastic(index: string, body: any[]) {
     try {
-      const data = body.flatMap((doc: any) => {
-        let id = doc?._id;
-        if (id) {
-          delete doc._id;
-        }
-        return [{ index: { _index: index, _id: id }, doc }];
-      });
-      await this.ESclient.bulk({
-        refresh: true,
-        body: data,
-      });
+      const batchSize = 1000;
+      const totalDocs = body.length;
 
-      if (this.option.debug)
-        console.log("Debug: Elastic bulk index created: " + index);
+      const promises = [];
+      for (let i = 0; i < totalDocs; i += batchSize) {
+        try {
+          const batch = body.slice(i, i + batchSize);
+
+          const data = batch.flatMap((doc: any) => {
+            let id = doc?._id?.toString();
+            if (id) {
+              delete doc._id;
+            }
+            return [{ index: { _index: index, _id: id } }, doc];
+          });
+
+          const promise = this.ESclient.bulk({
+            refresh: true,
+            body: data,
+          });
+
+          promises.push(promise);
+          this.dataCount += batch.length;
+
+          if (this.option.debug) {
+            console.log(
+              `Info: Queued batch ${
+                i + batch.length
+              } out of ${totalDocs} documents for processing ${index}`
+            );
+          }
+        } catch (error) {
+          this.failedDataCount += batchSize;
+          if (this.option.debug) {
+            console.error(`Error: Failed to process data`);
+          }
+        }
+      }
+      await Promise.all(promises);
+
+      if (this.option.debug) {
+        console.log("Info: Elastic bulk index created: " + index);
+      }
     } catch (error) {
-      if (this.option.debug) console.log("Debug: Failed to create bulk index");
+      if (this.option.debug) {
+        console.error("Error: Failed to create bulk index");
+      }
       throw error;
     }
   }

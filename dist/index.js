@@ -45,6 +45,10 @@ var Sync = /** @class */ (function () {
             initialSync: true,
             debug: false,
         };
+        this.indexCount = 0;
+        this.failedIndexCount = 0;
+        this.dataCount = 0;
+        this.failedDataCount = 0;
         this.mongoURL = mongoURL;
         this.elasticURL = elasticURL;
         if (option) {
@@ -75,6 +79,8 @@ var Sync = /** @class */ (function () {
                         return [4 /*yield*/, this.initDbSync()];
                     case 5:
                         _a.sent();
+                        // if (this.option.debug)
+                        console.log("Info: Initial mongodb sync completed with index=> ".concat(this.indexCount, " success and ").concat(this.failedIndexCount, " failed ||  data=> ").concat(this.dataCount, " success and ").concat(this.failedDataCount, " failed"));
                         return [3 /*break*/, 7];
                     case 6:
                         error_1 = _a.sent();
@@ -180,43 +186,67 @@ var Sync = /** @class */ (function () {
         });
     };
     Sync.prototype.initDbSync = function () {
-        var _a;
         return __awaiter(this, void 0, void 0, function () {
-            var collectionsArr, collection, i, coll, index, allData, error_4;
-            return __generator(this, function (_b) {
-                switch (_b.label) {
+            var collectionsArr, collection, promises, error_4;
+            var _this = this;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
                     case 0:
-                        _b.trys.push([0, 7, , 8]);
+                        _a.trys.push([0, 3, , 4]);
                         return [4 /*yield*/, this.db.listCollections().toArray()];
                     case 1:
-                        collectionsArr = _b.sent();
+                        collectionsArr = _a.sent();
                         collection = collectionsArr.map(function (ele) {
                             return ele.type === "collection" ? ele.name : null;
                         });
-                        i = 0;
-                        _b.label = 2;
+                        promises = collection.map(function (coll) { return __awaiter(_this, void 0, void 0, function () {
+                            var index, allData, error_5;
+                            var _a;
+                            return __generator(this, function (_b) {
+                                switch (_b.label) {
+                                    case 0:
+                                        if (!coll) return [3 /*break*/, 8];
+                                        index = ((_a = this === null || this === void 0 ? void 0 : this.option) === null || _a === void 0 ? void 0 : _a.prefix) + coll.toLowerCase();
+                                        _b.label = 1;
+                                    case 1:
+                                        _b.trys.push([1, 7, , 8]);
+                                        return [4 /*yield*/, this.db.collection(coll).find().toArray()];
+                                    case 2:
+                                        allData = _b.sent();
+                                        if (!(Array.isArray(allData) && allData.length > 0)) return [3 /*break*/, 4];
+                                        return [4 /*yield*/, this.createBulkDataOnElastic(index, allData)];
+                                    case 3:
+                                        _b.sent();
+                                        return [3 /*break*/, 6];
+                                    case 4: return [4 /*yield*/, this.createIndexOnElastic(index)];
+                                    case 5:
+                                        _b.sent();
+                                        _b.label = 6;
+                                    case 6:
+                                        this.indexCount++;
+                                        return [3 /*break*/, 8];
+                                    case 7:
+                                        error_5 = _b.sent();
+                                        this.failedIndexCount++;
+                                        if (this.option.debug) {
+                                            console.error("Error: Failed to process collection ".concat(coll));
+                                        }
+                                        return [3 /*break*/, 8];
+                                    case 8: return [2 /*return*/];
+                                }
+                            });
+                        }); });
+                        return [4 /*yield*/, Promise.allSettled(promises)];
                     case 2:
-                        if (!(i < collection.length)) return [3 /*break*/, 6];
-                        coll = collection[i];
-                        index = ((_a = this === null || this === void 0 ? void 0 : this.option) === null || _a === void 0 ? void 0 : _a.prefix) + coll.toLowerCase();
-                        if (!coll) return [3 /*break*/, 5];
-                        return [4 /*yield*/, this.db.collection(coll).find().toArray()];
+                        _a.sent();
+                        return [3 /*break*/, 4];
                     case 3:
-                        allData = _b.sent();
-                        return [4 /*yield*/, this.createBulkDataOnElastic(index, allData)];
-                    case 4:
-                        _b.sent();
-                        _b.label = 5;
-                    case 5:
-                        i++;
-                        return [3 /*break*/, 2];
-                    case 6: return [3 /*break*/, 8];
-                    case 7:
-                        error_4 = _b.sent();
-                        if (this.option.debug)
+                        error_4 = _a.sent();
+                        if (this.option.debug) {
                             console.log("Debug: Failed to initial sync mongodb");
+                        }
                         throw error_4;
-                    case 8: return [2 /*return*/];
+                    case 4: return [2 /*return*/];
                 }
             });
         });
@@ -230,7 +260,7 @@ var Sync = /** @class */ (function () {
                             _this.db
                                 .watch({ fullDocument: "updateLookup" })
                                 .on("change", function (data, error) { return __awaiter(_this, void 0, void 0, function () {
-                                var error_5;
+                                var error_6;
                                 return __generator(this, function (_a) {
                                     switch (_a.label) {
                                         case 0:
@@ -245,10 +275,10 @@ var Sync = /** @class */ (function () {
                                             resolve();
                                             return [3 /*break*/, 3];
                                         case 2:
-                                            error_5 = _a.sent();
+                                            error_6 = _a.sent();
                                             if (this.option.debug)
                                                 console.log("Debug: Error in change event");
-                                            reject(error_5);
+                                            reject(error_6);
                                             return [3 /*break*/, 3];
                                         case 3: return [2 /*return*/];
                                     }
@@ -268,7 +298,7 @@ var Sync = /** @class */ (function () {
     Sync.prototype.generateOperation = function (data) {
         var _a;
         return __awaiter(this, void 0, void 0, function () {
-            var id, body, index, _b, error_6;
+            var id, body, index, _b, error_7;
             return __generator(this, function (_c) {
                 switch (_c.label) {
                     case 0:
@@ -318,8 +348,8 @@ var Sync = /** @class */ (function () {
                         return [3 /*break*/, 10];
                     case 10: return [3 /*break*/, 12];
                     case 11:
-                        error_6 = _c.sent();
-                        throw error_6;
+                        error_7 = _c.sent();
+                        throw error_7;
                     case 12: return [2 /*return*/];
                 }
             });
@@ -327,7 +357,7 @@ var Sync = /** @class */ (function () {
     };
     Sync.prototype.dropIndexOnElastic = function (index) {
         return __awaiter(this, void 0, void 0, function () {
-            var error_7;
+            var error_8;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -341,10 +371,10 @@ var Sync = /** @class */ (function () {
                             console.log("Debug: Elastic index dropped");
                         return [3 /*break*/, 3];
                     case 2:
-                        error_7 = _a.sent();
+                        error_8 = _a.sent();
                         if (this.option.debug)
                             console.log("Debug: Failed to drop index");
-                        throw error_7;
+                        throw error_8;
                     case 3: return [2 /*return*/];
                 }
             });
@@ -352,7 +382,7 @@ var Sync = /** @class */ (function () {
     };
     Sync.prototype.deleteDataOnElastic = function (id, index) {
         return __awaiter(this, void 0, void 0, function () {
-            var error_8;
+            var error_9;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -367,10 +397,10 @@ var Sync = /** @class */ (function () {
                             console.log("Debug: Elastic index deleted");
                         return [3 /*break*/, 3];
                     case 2:
-                        error_8 = _a.sent();
+                        error_9 = _a.sent();
                         if (this.option.debug)
                             console.log("Debug: Failed to delete index");
-                        throw error_8;
+                        throw error_9;
                     case 3: return [2 /*return*/];
                 }
             });
@@ -378,7 +408,7 @@ var Sync = /** @class */ (function () {
     };
     Sync.prototype.updateDataOnElastic = function (id, index, body) {
         return __awaiter(this, void 0, void 0, function () {
-            var error_9;
+            var error_10;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -398,18 +428,74 @@ var Sync = /** @class */ (function () {
                             console.log("Debug: Elastic index updated");
                         return [3 /*break*/, 3];
                     case 2:
-                        error_9 = _a.sent();
+                        error_10 = _a.sent();
                         if (this.option.debug)
                             console.log("Debug: Failed to update index");
-                        throw error_9;
+                        throw error_10;
                     case 3: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    Sync.prototype.indexExists = function (index) {
+        return __awaiter(this, void 0, void 0, function () {
+            var exists, error_11;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        _a.trys.push([0, 2, , 3]);
+                        return [4 /*yield*/, this.ESclient.indices.exists({
+                                index: index,
+                            })];
+                    case 1:
+                        exists = (_a.sent()).body;
+                        if (this.option.debug)
+                            console.log("Info: Elastic index already exists => ", index);
+                        return [2 /*return*/, true];
+                    case 2:
+                        error_11 = _a.sent();
+                        if (this.option.debug)
+                            console.error("Error checking if index \"".concat(index, "\" exists:"), error_11);
+                        return [2 /*return*/, false];
+                    case 3: return [2 /*return*/];
+                }
+            });
+        });
+    };
+    Sync.prototype.createIndexOnElastic = function (index) {
+        return __awaiter(this, void 0, void 0, function () {
+            var exists, error_12;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        _a.trys.push([0, 4, , 5]);
+                        return [4 /*yield*/, this.indexExists(index)];
+                    case 1:
+                        exists = _a.sent();
+                        if (!!exists) return [3 /*break*/, 3];
+                        return [4 /*yield*/, this.ESclient.indices.create({
+                                index: index,
+                                body: {},
+                            })];
+                    case 2:
+                        _a.sent();
+                        if (this.option.debug)
+                            console.log("Info: Elastic index created => ", index);
+                        _a.label = 3;
+                    case 3: return [3 /*break*/, 5];
+                    case 4:
+                        error_12 = _a.sent();
+                        if (this.option.debug)
+                            console.error("Error: Failed to create index => ", index);
+                        throw error_12;
+                    case 5: return [2 /*return*/];
                 }
             });
         });
     };
     Sync.prototype.createDataOnElastic = function (id, index, body) {
         return __awaiter(this, void 0, void 0, function () {
-            var error_10;
+            var error_13;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -422,13 +508,13 @@ var Sync = /** @class */ (function () {
                     case 1:
                         _a.sent();
                         if (this.option.debug)
-                            console.log("Debug: Elastic index created");
+                            console.log("Info: Elastic index created");
                         return [3 /*break*/, 3];
                     case 2:
-                        error_10 = _a.sent();
+                        error_13 = _a.sent();
                         if (this.option.debug)
-                            console.log("Debug: Failed to create index");
-                        throw error_10;
+                            console.error("Error: Failed to create index");
+                        throw error_13;
                     case 3: return [2 /*return*/];
                 }
             });
@@ -436,32 +522,55 @@ var Sync = /** @class */ (function () {
     };
     Sync.prototype.createBulkDataOnElastic = function (index, body) {
         return __awaiter(this, void 0, void 0, function () {
-            var data, error_11;
+            var batchSize, totalDocs, promises, i, batch, data, promise, error_14;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
                         _a.trys.push([0, 2, , 3]);
-                        data = body.flatMap(function (doc) {
-                            var id = doc === null || doc === void 0 ? void 0 : doc._id;
-                            if (id) {
-                                delete doc._id;
+                        batchSize = 1000;
+                        totalDocs = body.length;
+                        promises = [];
+                        for (i = 0; i < totalDocs; i += batchSize) {
+                            try {
+                                batch = body.slice(i, i + batchSize);
+                                data = batch.flatMap(function (doc) {
+                                    var _a;
+                                    var id = (_a = doc === null || doc === void 0 ? void 0 : doc._id) === null || _a === void 0 ? void 0 : _a.toString();
+                                    if (id) {
+                                        delete doc._id;
+                                    }
+                                    return [{ index: { _index: index, _id: id } }, doc];
+                                });
+                                promise = this.ESclient.bulk({
+                                    refresh: true,
+                                    body: data,
+                                });
+                                promises.push(promise);
+                                this.dataCount += batch.length;
+                                if (this.option.debug) {
+                                    console.log("Info: Queued batch ".concat(i + batch.length, " out of ").concat(totalDocs, " documents for processing ").concat(index));
+                                }
                             }
-                            return [{ index: { _index: index, _id: id }, doc: doc }];
-                        });
-                        return [4 /*yield*/, this.ESclient.bulk({
-                                refresh: true,
-                                body: data,
-                            })];
+                            catch (error) {
+                                this.failedDataCount += batchSize;
+                                if (this.option.debug) {
+                                    console.error("Error: Failed to process data");
+                                }
+                            }
+                        }
+                        return [4 /*yield*/, Promise.all(promises)];
                     case 1:
                         _a.sent();
-                        if (this.option.debug)
-                            console.log("Debug: Elastic bulk index created: " + index);
+                        if (this.option.debug) {
+                            console.log("Info: Elastic bulk index created: " + index);
+                        }
                         return [3 /*break*/, 3];
                     case 2:
-                        error_11 = _a.sent();
-                        if (this.option.debug)
-                            console.log("Debug: Failed to create bulk index");
-                        throw error_11;
+                        error_14 = _a.sent();
+                        if (this.option.debug) {
+                            console.error("Error: Failed to create bulk index");
+                        }
+                        throw error_14;
                     case 3: return [2 /*return*/];
                 }
             });
